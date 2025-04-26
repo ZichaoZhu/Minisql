@@ -95,6 +95,7 @@ class Field {
 
   inline const char *GetData() const { return Type::GetInstance(type_id_)->GetData(*this); }
 
+  // 返回得到的是我们放进buf的字段的长度
   inline uint32_t SerializeTo(char *buf) const { return Type::GetInstance(type_id_)->SerializeTo(*this, buf); }
 
   inline static uint32_t DeserializeFrom(char *buf, const TypeId type_id, Field **field, bool is_null) {

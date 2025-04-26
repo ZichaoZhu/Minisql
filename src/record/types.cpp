@@ -227,6 +227,7 @@ CmpBool TypeFloat::CompareGreaterThanEquals(const Field &left, const Field &righ
 // ==============================TypeChar=============================
 uint32_t TypeChar::SerializeTo(const Field &field, char *buf) const {
   if (!field.IsNull()) {
+    // 分为两段，前一段存长度，后一段存数据；前一段所用空间为sizeof(uint32_t)
     uint32_t len = GetLength(field);
     memcpy(buf, &len, sizeof(uint32_t));
     memcpy(buf + sizeof(uint32_t), field.value_.chars_, len);
