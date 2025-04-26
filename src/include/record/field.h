@@ -29,6 +29,11 @@ class Field {
 
   // integer
   explicit Field(TypeId type, int32_t i) : type_id_(type) {
+    /**
+     *ASSERT 是一个宏，用于在调试模式下检查条件是否为真。
+     *如果条件为假，程序会终止并输出错误信息。
+     *它通常用于捕获程序中的逻辑错误
+     */
     ASSERT(type == TypeId::kTypeInt, "Invalid type.");
     value_.integer_ = i;
     len_ = Type::GetTypeSize(type);
@@ -83,6 +88,7 @@ class Field {
 
   inline bool IsNull() const { return is_null_; }
 
+  // 使用GetInstance()函数获得一个Type对象的实例
   inline uint32_t GetLength() const { return Type::GetInstance(type_id_)->GetLength(*this); }
 
   inline TypeId GetTypeId() const { return type_id_; }
@@ -153,7 +159,7 @@ class Field {
   TypeId type_id_;
   uint32_t len_;
   bool is_null_{false};
-  bool manage_data_{false};
+  bool manage_data_{false}; // 管理是否需要动态分配内存，确保准确释放
 };
 
 #endif  // MINISQL_FIELD_H
