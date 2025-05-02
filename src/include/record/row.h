@@ -176,7 +176,29 @@ class Row {
    * For non-empty row with null fields, eg: |null|null|null|, return header size only
    * @return
    */
-  uint32_t GetSerializedSize(Schema *schema) const;
+  uint32_t GetSerializedSize(Schema *schema) const {
+    /* 序列化的长度由三部分决定
+     * 1. Field Nums
+     * 2. Null bitmaps
+     * 3. Field-1 + ... + Field-N
+     */
+    ASSERT(schema != nullptr, "Invalid Schema");
+    // 此时我们认为field_已经反序列化过了
+    ASSERT(schema->GetColumnCount() == fields_.size(), "Invalid field");
+    // Field Nums
+    uint32_t field_nums_len = sizeof(size_t);
+    // Null bitmaps
+    uint32_t bitmap_num = (fields_.size() + 7) / 8;
+    uint32_t null_bitmaps_len = sizeof(char) * bitmap_num;
+    // Field 1-n
+    uint32_t fields_len = 0;
+    for (auto &field : fields_) {
+      if (!field->IsNull()) {
+            fields_len += field->GetSerializedSize();
+      }
+    }
+    return field_nums_len + null_bitmaps_len + fields_len;
+  }
 
   void GetKeyFromRow(const Schema *schema, const Schema *key_schema, Row &key_row);
 
