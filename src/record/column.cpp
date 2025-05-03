@@ -78,7 +78,13 @@ uint32_t Column::SerializeTo(char *buf) const {
  */
 uint32_t Column::GetSerializedSize() const {
   // replace with your code here
-  return 0;
+  /* 就是按照上面的格式就好了
+   * | COLUMN_MAGIC_NUM | name_len | name | type | len | table_ind | nullable | unique |
+   * 此时我们认为column已知
+   */
+  uint32_t len = sizeof(COLUMN_MAGIC_NUM) + sizeof(size_t) + len_ + sizeof(type_) +
+                 sizeof(len_) + sizeof(table_ind_) + sizeof(nullable_) + sizeof(unique_);
+  return len;
 }
 
 /**
