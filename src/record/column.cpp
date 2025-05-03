@@ -51,7 +51,7 @@ uint32_t Column::SerializeTo(char *buf) const {
   offset += sizeof(uint32_t);
   // 序列化name_len以及name
   size_t name_len = name_.length();
-  MACH_WRITE_UINT32(buf + offset, name_len);
+  MACH_WRITE_TO(size_t, buf + offset, name_len);
   offset += sizeof(uint32_t);
   MACH_WRITE_STRING(buf + offset, name_);
   offset += name_len;
@@ -86,5 +86,40 @@ uint32_t Column::GetSerializedSize() const {
  */
 uint32_t Column::DeserializeFrom(char *buf, Column *&column) {
   // replace with your code here
-  return 0;
+  /* 参考前面的格式进行反序列化
+   * 需要注意的是，在这里我们有两个参数buf和column，我们需要先进行一些条件的检查
+   */
+  // 检查buf是否为空
+  ASSERT(buf != nullptr, "Invalid buf which is null.");
+  // 定义偏移量
+  uint32_t offset = 0;
+  // 提取COLUMN_MAGIC_NUM并进行检查
+  uint32_t magic_num = MACH_READ_UINT32(buf);
+  ASSERT(magic_num != column->COLUMN_MAGIC_NUM, "Invalid magic number.");
+  offset += sizeof(uint32_t);
+  // 提取name_len
+  size_t name_len = MACH_READ_FROM(size_t, buf + offset);
+  offset += sizeof(uint32_t);
+  // 提取name
+  std::string name;
+  memcpy(name.data(), buf + offset, name_len);
+  offset += name_len;
+  // 提取type
+  TypeId type = MACH_READ_FROM(TypeId, buf + offset);
+  offset += sizeof(type);
+  // 提取len
+  uint32_t len = MACH_READ_UINT32(buf + offset);
+  offset += sizeof(uint32_t);
+  // 提取table_ind
+  uint32_t table_ind = MACH_READ_UINT32(buf + offset);
+  offset += sizeof(uint32_t);
+  // 提取nullable
+  bool nullable = MACH_READ_FROM(bool, buf + offset);
+  offset += sizeof(bool);
+  // 提取unique
+  bool unique = MACH_READ_FROM(bool, buf + offset);
+  offset += sizeof(bool);
+  // 进行赋值
+  column = new Column(name, type, len, table_ind, nullable, unique);
+  return offset;
 }
