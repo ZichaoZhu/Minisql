@@ -9,13 +9,13 @@
 TableIterator::TableIterator(TableHeap *table_heap, RowId rid, Txn *txn) {
   table_heap_ = table_heap;
   rid_ = RowId(rid);
-  txn_ = new Txn();
+  txn_ = txn;
 }
 
 TableIterator::TableIterator(const TableIterator &other) {
   table_heap_ = other.table_heap_;
   rid_ = other.rid_;
-  txn_ = new Txn();
+  txn_ = other.txn_;
 }
 
 TableIterator::~TableIterator() {

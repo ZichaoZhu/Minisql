@@ -15,8 +15,8 @@ bool TableHeap::InsertTuple(Row &row, Txn *txn) {
   }
   page->WLatch();
   while (!page->InsertTuple(row, schema_, txn, lock_manager_, log_manager_)) {  // 若是无法插入
-    page->WUnlatch(); // 解锁
-    auto next_page_id = page->GetNextPageId();  // 获取下一个page_id
+    page->WUnlatch();                                                           // 解锁
+    auto next_page_id = page->GetNextPageId();                                  // 获取下一个page_id
     // 若next_page_id恰好为INVALID_PAGE_ID，则说明当前的page已经是最后一个page了，而且无法插入，此时我们需要新建一个page
     if (next_page_id == INVALID_PAGE_ID) {
       auto new_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->NewPage(next_page_id));
@@ -104,8 +104,7 @@ bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) {
       ApplyDelete(rid, txn);
       if (!InsertTuple(row, txn)) {
         return false;
-      }
-      else
+      } else
         return true;
     }
   }
@@ -153,16 +152,14 @@ bool TableHeap::GetTuple(Row *row, Txn *txn) {
   buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
   if (!get_tuple) {
     return false;
-  }
-  else
+  } else
     return true;
 }
 
 void TableHeap::DeleteTable(page_id_t page_id) {
   if (page_id != INVALID_PAGE_ID) {
     auto temp_table_page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(page_id));  // 删除table_heap
-    if (temp_table_page->GetNextPageId() != INVALID_PAGE_ID)
-      DeleteTable(temp_table_page->GetNextPageId());
+    if (temp_table_page->GetNextPageId() != INVALID_PAGE_ID) DeleteTable(temp_table_page->GetNextPageId());
     buffer_pool_manager_->UnpinPage(page_id, false);
     buffer_pool_manager_->DeletePage(page_id);
   } else {
@@ -173,9 +170,31 @@ void TableHeap::DeleteTable(page_id_t page_id) {
 /**
  * TODO: Student Implement
  */
-TableIterator TableHeap::Begin(Txn *txn) { return TableIterator(nullptr, RowId(), nullptr); }
+TableIterator TableHeap::Begin(Txn *txn) {
+  // step 1: 获取第一页
+  auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(GetFirstPageId()));
+  if (page == nullptr) {
+    buffer_pool_manager_->UnpinPage(GetFirstPageId(), false);
+    return TableIterator(nullptr, RowId(), nullptr);
+  }
+  // step 2: 获取第一个tuple
+  RowId rid;
+  page->RLatch();
+  bool get_first_tuple = page->GetFirstTupleRid(&rid);
+  page->RUnlatch();
+  if (!get_first_tuple) {
+    buffer_pool_manager_->UnpinPage(GetFirstPageId(), false);
+    return TableIterator(nullptr, RowId(), nullptr);
+  }
+  // step 3: 返回迭代器
+  buffer_pool_manager_->UnpinPage(GetFirstPageId(), false);
+  return TableIterator(this, rid, txn);
+}
 
 /**
  * TODO: Student Implement
  */
-TableIterator TableHeap::End() { return TableIterator(nullptr, RowId(), nullptr); }
+TableIterator TableHeap::End() {
+  // end返回的是指向容器最后一个元素的下一个位置的迭代器
+  return TableIterator(this, RowId(INVALID_ROWID), nullptr);
+}
