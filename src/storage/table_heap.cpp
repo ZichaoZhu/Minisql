@@ -66,7 +66,51 @@ bool TableHeap::MarkDelete(const RowId &rid, Txn *txn) {
 /**
  * TODO: Student Implement
  */
-bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) { return false; }
+bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) {
+  // 找到要替换的page
+  auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(rid.GetPageId()));
+  if (page == nullptr) {
+    return false;
+  }
+  // 获得旧的row
+  Row old_row(rid);
+  bool get_old_row = page->GetTuple(&old_row, schema_, txn, lock_manager_);
+  if (!get_old_row) {
+    return false;
+  }
+  // 先获取锁
+  page->WLatch();
+  // 更新tuple
+  int update_res = page->UpdateTuple(row, &old_row, schema_, txn, lock_manager_, log_manager_);
+  page->WUnlatch();
+  // 根据返回结果
+  switch (update_res) {
+    // 更新成功
+    case 1: {
+      row.SetRowId(rid);
+      buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
+      return true;
+    }
+    // the slot number 或者是 tuple deleted
+    case -1:
+    case -2: {
+      buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+      return false;
+    }
+    // not enough space
+    case -3: {
+      page->WLatch();
+      // 先删除
+      ApplyDelete(rid, txn);
+      if (!InsertTuple(row, txn)) {
+        return false;
+      }
+      else
+        return true;
+    }
+  }
+
+}
 
 /**
  * TODO: Student Implement
