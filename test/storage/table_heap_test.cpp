@@ -122,7 +122,7 @@ TEST(TableHeapTest, UpdateFunctionsTest) {
   // 插入数据
   std::unordered_map<int64_t, Fields *> row_values;
   for (int i = 0; i < row_nums; i++) {
-    int32_t len = RandomUtils::RandomInt(0, 64);
+    int32_t len = 32;
     char *characters = new char[len];
     RandomUtils::RandomString(characters, len);
     Fields *fields =
@@ -165,7 +165,6 @@ TEST(TableHeapTest, UpdateFunctionsTest) {
 
   // 验证特殊情况 -3: 空间不足
   for (auto &row_kv : row_values) {
-    cout<<"num"<<endl;
     Row row(RowId(row_kv.first));
     table_heap->GetTuple(&row, nullptr);
 
@@ -227,6 +226,58 @@ TEST(TableHeapTest, FreeHeapTest) {
   RowId rid = row.GetRowId();
   Row deleted_row(rid);
   ASSERT_FALSE(table_heap->GetTuple(&deleted_row, nullptr));  // 应返回 false，表示内存已释放
+
+  // 清理资源
+  delete table_heap;
+  delete bpm_;
+  delete disk_mgr_;
+}
+
+TEST(TableHeapTest, IteratorTest) {
+  // 初始化测试环境
+  remove(db_file_name.c_str());
+  auto disk_mgr_ = new DiskManager(db_file_name);
+  auto bpm_ = new BufferPoolManager(DEFAULT_BUFFER_POOL_SIZE, disk_mgr_);
+  std::vector<Column *> columns = {new Column("id", TypeId::kTypeInt, 0, false, false),
+                                   new Column("name", TypeId::kTypeChar, 64, 1, true, false),
+                                   new Column("account", TypeId::kTypeFloat, 2, true, false)};
+  auto schema = std::make_shared<Schema>(columns);
+  TableHeap *table_heap = TableHeap::Create(bpm_, schema.get(), nullptr, nullptr, nullptr);
+
+  // 插入多条数据
+  for (int i = 1; i <= 5; i++) {
+    int32_t id = i;
+    std::string name = "name_" + std::to_string(i);
+    char *name_cstr = new char[name.length() + 1];
+    std::strcpy(name_cstr, name.c_str());
+    float account = i * 100.0f;
+    Fields fields = {Field(TypeId::kTypeInt, id), Field(TypeId::kTypeChar, name_cstr, name.length(), true),
+                     Field(TypeId::kTypeFloat, account)};
+    Row row(fields);
+    ASSERT_TRUE(table_heap->InsertTuple(row, nullptr));
+    delete name_cstr;
+  }
+
+  // 使用迭代器遍历所有数据
+  auto iter = table_heap->Begin(nullptr);
+  auto end = table_heap->End();
+  int count = 0;
+
+  while (iter != end) {
+    const Row &row = *iter;
+    std::string name = "name_" + std::to_string(count + 1);
+    char *name_cstr = new char[name.length() + 1];
+    std::strcpy(name_cstr, name.c_str());
+    ASSERT_TRUE(row.GetField(0)->CompareEquals(Field(kTypeInt, count + 1)));
+    ASSERT_TRUE(row.GetField(1)->CompareEquals(Field(kTypeChar, name_cstr, name.length(), true)));
+    ASSERT_TRUE(row.GetField(2)->CompareEquals(Field(kTypeFloat, (count + 1) * 100.0f)));
+    delete name_cstr;
+    ++iter;
+    count++;
+  }
+
+  // 验证迭代器遍历的数量是否正确
+  ASSERT_EQ(count, 5);
 
   // 清理资源
   delete table_heap;

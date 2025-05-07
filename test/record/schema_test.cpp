@@ -7,6 +7,11 @@
 #include "record/row.h"
 #include "record/schema.h"
 
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
+
 TEST(SchemaTest, SchemaValidation) {
   // 创建列
   std::vector<Column *> columns = {
