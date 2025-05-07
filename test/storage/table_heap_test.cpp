@@ -193,3 +193,38 @@ TEST(TableHeapTest, UpdateFunctionsTest) {
     break;  // 测试一个即可
   }
 }
+
+// FreeHeap 测试
+TEST(TableHeapTest, FreeHeapTest) {
+  // 初始化测试环境
+  remove(db_file_name.c_str());
+  auto disk_mgr_ = new DiskManager(db_file_name);
+  auto bpm_ = new BufferPoolManager(DEFAULT_BUFFER_POOL_SIZE, disk_mgr_);
+  std::vector<Column *> columns = {new Column("id", TypeId::kTypeInt, 0, false, false),
+                                   new Column("name", TypeId::kTypeChar, 64, 1, true, false),
+                                   new Column("account", TypeId::kTypeFloat, 2, true, false)};
+  auto schema = std::make_shared<Schema>(columns);
+  TableHeap *table_heap = TableHeap::Create(bpm_, schema.get(), nullptr, nullptr, nullptr);
+
+  // 插入数据
+  int32_t id = 1;
+  char name[] = "test_name";
+  float account = 100.0f;
+  Fields fields = {Field(TypeId::kTypeInt, id), Field(TypeId::kTypeChar, name, strlen(name), true),
+                   Field(TypeId::kTypeFloat, account)};
+  Row row(fields);
+  ASSERT_TRUE(table_heap->InsertTuple(row, nullptr));
+
+  // 调用 FreeHeap() 释放堆内存
+  table_heap->FreeHeap();
+
+  // 验证堆内存是否已释放
+  RowId rid = row.GetRowId();
+  Row deleted_row(rid);
+  ASSERT_FALSE(table_heap->GetTuple(&deleted_row, nullptr));  // 应返回 false，表示内存已释放
+
+  // 清理资源
+  delete table_heap;
+  delete bpm_;
+  delete disk_mgr_;
+}
