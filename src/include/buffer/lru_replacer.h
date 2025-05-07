@@ -4,7 +4,6 @@
 #include <list>
 #include <mutex>
 #include <unordered_set>
-#include <unordered_map>
 #include <vector>
 
 #include "buffer/replacer.h"
@@ -16,7 +15,7 @@ using namespace std;
  * LRUReplacer implements the Least Recently Used replacement policy.
  */
 class LRUReplacer : public Replacer {
-public:
+ public:
   /**
    * Create a new LRUReplacer.
    * @param num_pages the maximum number of pages the LRUReplacer will be required to store
@@ -37,8 +36,6 @@ public:
   size_t Size() override;
 
 private:
-  size_t capacity;list<frame_id_t> lru_list_;
-  unordered_map<frame_id_t,list<frame_id_t>::iterator>lru_list_map_;
   // add your own private member variables here
 };
 
