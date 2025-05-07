@@ -91,11 +91,6 @@ class TableHeap {
   /**
    * @return the begin iterator of this table
    */
-
-
-  // Free the
-  void FreeHeap();
-
   TableIterator Begin(Txn *txn);
 
   /**

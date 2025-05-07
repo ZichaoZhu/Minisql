@@ -74,23 +74,39 @@ bool TableHeap::UpdateTuple(Row &row, const RowId &rid, Txn *txn) {
   }
   // 获得旧的row
   Row old_row(rid);
+  bool get_old_row = page->GetTuple(&old_row, schema_, txn, lock_manager_);
+  if (!get_old_row) {
+    return false;
+  }
   // 先获取锁
   page->WLatch();
   // 更新tuple
   int update_res = page->UpdateTuple(row, &old_row, schema_, txn, lock_manager_, log_manager_);
   page->WUnlatch();
   // 根据返回结果
-  if (update_res == 1) {
-    row.SetRowId(rid);
-    buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
-    return true;
-  }
-  else {
-    int res = -update_res;
-    string statement[] = {"slot number is invalid", "tuple is deleted", "not enough space to update"};
-    cout << "UpdateTuple error " << res << " : " << statement[res - 1] << endl;
-    buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
-    return false;
+  switch (update_res) {
+    // 更新成功
+    case 1: {
+      row.SetRowId(rid);
+      buffer_pool_manager_->UnpinPage(page->GetTablePageId(), true);
+      return true;
+    }
+    // the slot number 或者是 tuple deleted
+    case -1:
+    case -2: {
+      buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+      return false;
+    }
+    // not enough space
+    case -3: {
+      page->WLatch();
+      // 先删除
+      ApplyDelete(rid, txn);
+      if (!InsertTuple(row, txn)) {
+        return false;
+      } else
+        return true;
+    }
   }
 }
 
@@ -148,30 +164,6 @@ void TableHeap::DeleteTable(page_id_t page_id) {
     buffer_pool_manager_->DeletePage(page_id);
   } else {
     DeleteTable(first_page_id_);
-  }
-}
-
-void TableHeap::FreeHeap() {
-  // 获取当前页的 ID
-  page_id_t current_page_id = first_page_id_;
-
-  // 遍历所有页并释放
-  while (current_page_id != INVALID_PAGE_ID) {
-    // 获取当前页
-    auto page = reinterpret_cast<TablePage *>(buffer_pool_manager_->FetchPage(current_page_id));
-    if (page == nullptr) {
-      break;
-    }
-
-    // 获取下一页的 ID
-    page_id_t next_page_id = page->GetNextPageId();
-
-    // 释放当前页
-    buffer_pool_manager_->UnpinPage(current_page_id, false);
-    buffer_pool_manager_->DeletePage(current_page_id);
-
-    // 移动到下一页
-    current_page_id = next_page_id;
   }
 }
 

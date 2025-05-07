@@ -19,9 +19,7 @@ TableIterator::TableIterator(const TableIterator &other) {
 }
 
 TableIterator::~TableIterator() {
-  table_heap_ = nullptr;
-  rid_ = RowId();
-  txn_ = nullptr;
+  delete txn_;
 }
 
 bool TableIterator::operator==(const TableIterator &itr) const {
@@ -93,10 +91,10 @@ TableIterator &TableIterator::operator++() {
   if (get_tuple) {
     rid_ = next_rid;
   } else {  // step 2: 找next_page
+    auto next_page = reinterpret_cast<TablePage *>(table_heap_->buffer_pool_manager_->FetchPage(page->GetNextPageId()));
     // 检测next_page是不是空的
-    if (page->GetNextPageId() >= 0) {
-      auto next_page = reinterpret_cast<TablePage *>(table_heap_->buffer_pool_manager_->FetchPage(page->GetNextPageId()));
-      if (page->GetFirstTupleRid(&next_rid)) {
+    if (next_page != nullptr) {
+      if (next_page->GetFirstTupleRid(&next_rid)) {
         rid_ = next_rid;
       } else {
         table_heap_ = nullptr;

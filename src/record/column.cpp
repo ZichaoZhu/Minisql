@@ -52,7 +52,7 @@ uint32_t Column::SerializeTo(char *buf) const {
   // 序列化name_len以及name
   size_t name_len = name_.length();
   MACH_WRITE_TO(size_t, buf + offset, name_len);
-  offset += sizeof(size_t);
+  offset += sizeof(uint32_t);
   MACH_WRITE_STRING(buf + offset, name_);
   offset += name_len;
   // 序列化type
@@ -101,13 +101,14 @@ uint32_t Column::DeserializeFrom(char *buf, Column *&column) {
   uint32_t offset = 0;
   // 提取COLUMN_MAGIC_NUM并进行检查
   uint32_t magic_num = MACH_READ_UINT32(buf);
-  ASSERT(magic_num == column->COLUMN_MAGIC_NUM, "Invalid magic number.");
+  ASSERT(magic_num != column->COLUMN_MAGIC_NUM, "Invalid magic number.");
   offset += sizeof(uint32_t);
   // 提取name_len
   size_t name_len = MACH_READ_FROM(size_t, buf + offset);
-  offset += sizeof(size_t);
+  offset += sizeof(uint32_t);
   // 提取name
-  std::string name(buf + offset, name_len);
+  std::string name;
+  memcpy(name.data(), buf + offset, name_len);
   offset += name_len;
   // 提取type
   TypeId type = MACH_READ_FROM(TypeId, buf + offset);
@@ -124,9 +125,7 @@ uint32_t Column::DeserializeFrom(char *buf, Column *&column) {
   // 提取unique
   bool unique = MACH_READ_FROM(bool, buf + offset);
   offset += sizeof(bool);
-  // 进行赋值，这里需要注意的是，如果type是char类型，我们需要使用不同的构造函数
-  column = (type == TypeId::kTypeChar)
-             ? new Column(name, type, len, table_ind, nullable, unique)
-             : new Column(name, type, table_ind, nullable, unique);
+  // 进行赋值
+  column = new Column(name, type, len, table_ind, nullable, unique);
   return offset;
 }
