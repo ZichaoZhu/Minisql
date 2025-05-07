@@ -19,7 +19,9 @@ TableIterator::TableIterator(const TableIterator &other) {
 }
 
 TableIterator::~TableIterator() {
-  delete txn_;
+  table_heap_ = nullptr;
+  rid_ = RowId();
+  txn_ = nullptr;
 }
 
 bool TableIterator::operator==(const TableIterator &itr) const {

@@ -9,6 +9,11 @@
 #include "record/schema.h"
 #include "utils/utils.h"
 
+int main(int argc, char **argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
+
 static string db_file_name = "table_heap_test.db";
 using Fields = std::vector<Field>;
 
