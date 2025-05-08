@@ -32,6 +32,9 @@ uint32_t Schema::GetSerializedSize() const {
    * | SCHEMA_MAGIC_NUM | columns_num | columns_ | is_manage_ |
    */
   uint32_t len = 0;
+  for (const auto &column : columns_) {
+    len += column->GetSerializedSize();
+  }
   len += sizeof(SCHEMA_MAGIC_NUM) + sizeof(uint32_t) + sizeof(uint32_t);
   return len;
 }

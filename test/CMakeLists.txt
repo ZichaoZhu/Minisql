@@ -1,7 +1,10 @@
 FILE(GLOB_RECURSE MINISQL_TEST_SOURCES ${PROJECT_SOURCE_DIR}/test/*/*test.cpp)
 
 SET(TEST_MAIN_PATH ${PROJECT_SOURCE_DIR}/test/main_test.cpp)
-ADD_EXECUTABLE(minisql_test ${MINISQL_TEST_SOURCES} ${TEST_MAIN_PATH})
+ADD_EXECUTABLE(minisql_test ${MINISQL_TEST_SOURCES} ${TEST_MAIN_PATH}
+        record/column_test.cpp
+        record/schema_test.cpp
+        storage/TableIterator_test.cpp)
 ADD_LIBRARY(minisql_test_main ${TEST_MAIN_PATH})
 TARGET_LINK_LIBRARIES(minisql_test_main glog gtest)
 TARGET_LINK_LIBRARIES(minisql_test zSql glog gtest)
