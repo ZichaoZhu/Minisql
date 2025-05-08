@@ -14,7 +14,7 @@ TableIterator::TableIterator(TableHeap *table_heap, RowId rid, Txn *txn) {
 
 TableIterator::TableIterator(const TableIterator &other) {
   table_heap_ = other.table_heap_;
-  rid_ = other.rid_;
+  rid_ = RowId(other.rid_);
   txn_ = other.txn_;
 }
 
