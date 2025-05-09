@@ -344,6 +344,98 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteCreateTable" << std::endl;
 #endif
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+  string table_name = ast->child_->val_;
+
+  pSyntaxNode column_list = ast->child_->next_;
+  vector<string> column_names;
+  vector<TypeId> column_types;
+  vector<uint32_t> column_lengths;
+  vector<uint32_t> column_index;
+  uint32_t col_index = 0;
+  vector<bool> column_is_unique;
+
+  vector<string> primary_keys;
+  // 遍历column子树
+  for (auto col = column_list->child_; col != nullptr; col = col->next_) {
+    if (col->type_ == kNodeColumnDefinition) {
+      auto col_attributes = col->child_;
+      string col_name;
+      TypeId col_type;
+      uint32_t col_length = 0;
+      bool col_is_unique = false;
+
+      col_name = col_attributes->val_;
+      col_attributes = col_attributes->next_;
+      col_is_unique = strcmp(col_attributes->val_, "unique") == 0;
+
+      // 获取类型
+      string type = col_attributes->val_;
+      if (type == "int") {
+        col_type = kTypeInt;
+      }else if (type == "float") {
+        col_type = kTypeFloat;
+      }else if (type == "char") {
+        col_type = kTypeChar;
+        col_length = atoi(col_attributes->child_->val_);
+        if (col_length <=0) {
+          cout << "Invalid char length." << endl;
+          return DB_FAILED;
+        }
+      }else {
+        cout << "Invalid column type." << endl;
+        return DB_FAILED;
+      }
+
+      column_names.push_back(col_name);
+      column_types.push_back(col_type);
+      column_lengths.push_back(col_length);
+      column_index.push_back(col_index++);
+      column_is_unique.push_back(col_is_unique);
+    }
+    else if (col->type_ == kNodeColumnList) {
+      auto col_attributes = col->child_;
+      while (col_attributes != nullptr && col_attributes->type_ == kNodeIdentifier) {
+        string primary_key = col_attributes->val_;
+        primary_keys.push_back(primary_key);
+      }
+    }
+  }
+
+  // 建立columns
+  vector<Column *> columns;
+  for (int index = 0; index < col_index; index++) {
+    // primary key或者unique的时候，not nullable
+    unordered_set<string> primary_keys_set = unordered_set<string>(primary_keys.begin(), primary_keys.end());
+    bool is_primary_key = primary_keys_set.find(column_names[index]) != primary_keys_set.end();
+    bool not_nullable = column_is_unique[index] || is_primary_key;
+    if (column_types[index] == kTypeChar) {
+      columns.push_back(new Column(column_names[index], column_types[index], column_lengths[index], index, not_nullable, column_is_unique[index]));
+    }
+    else {
+      columns.push_back(new Column(column_names[index], column_types[index], index, not_nullable, column_is_unique[index]));
+    }
+  }
+
+  // 创建表格
+  Schema *schema = new Schema(columns);
+  TableInfo *table_info;
+  dberr_t result = context->GetCatalog()->CreateTable(table_name, schema, context->GetTransaction(), table_info);
+  if (result != DB_SUCCESS) {
+    return result;
+  }
+  // 创建索引
+  if (!primary_keys.empty()) {
+    IndexInfo *index_info;
+    result = context->GetCatalog()->CreateIndex(table_info->GetTableName(), table_name + "_primary_key", primary_keys, context->GetTransaction(), index_info, "bptree");
+  }
+  if (result != DB_SUCCESS) {
+    return result;
+    cout << "table " << table_info->GetTableName() << " created" << endl;
+  }
   return DB_FAILED;
 }
 
