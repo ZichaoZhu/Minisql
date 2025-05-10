@@ -455,13 +455,11 @@ dberr_t ExecuteEngine::ExecuteDropTable(pSyntaxNode ast, ExecuteContext *context
   // 先得到所有的索引信息
   vector<IndexInfo *> indexes;
   dberr_t result_get_index = context->GetCatalog()->GetTableIndexes(table_name, indexes);
-  if (result_get_index != DB_SUCCESS) {
-    return result_get_index;
-  }
   // 删除所有的索引
   for (auto index : indexes) {
     dberr_t result_drop_index = context->GetCatalog()->DropIndex(table_name, index->GetIndexName());
     if (result_drop_index != DB_SUCCESS) {
+      cout << "Index " << index->GetIndexName() << " drop error" << endl;
       return result_drop_index;
     }
   }
@@ -477,6 +475,60 @@ dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *conte
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteShowIndexes" << std::endl;
 #endif
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+
+  // 首先，我们找到数据库中的所有的表格
+  vector<TableInfo *> tables_info;
+  dberr_t result_get_table = context->GetCatalog()->GetTables(tables_info);
+  if (result_get_table != DB_SUCCESS) {
+    cout << "No table selected" << endl;
+    return result_get_table;
+  }
+
+  // 定义字符串输出流
+  stringstream ss;
+  // 定义writer用于输出结果
+  ResultWriter writer(ss);
+
+  // 遍历table，输出index
+  for (auto table = tables_info.begin(); table != tables_info.end(); table++) {
+    vector<IndexInfo *> indexes_info;
+    dberr_t result_get_indexes = context->GetCatalog()->GetTableIndexes((*table)->GetTableName(), indexes_info);
+    // 检测是否查询到，查询到再进行接下来的操作
+    if (result_get_indexes != DB_SUCCESS) {
+      return result_get_indexes;
+    }
+    else {
+      // 我们首先输出表格名字
+      // 我们设计输出的表格是一列的，那么我们需要确定一个宽度
+      vector<int> output_lengths = {static_cast<int>((*table)->GetTableName().length()) + 9};
+      for (auto index : indexes_info) {
+        if (index->GetIndexName().length() > output_lengths[0]) {
+          output_lengths[0] = index->GetIndexName().length();
+        }
+      }
+      // 我们输出表格的名字
+      // 第一行为"Index in " + (*table)->GetTableName()，因此我们对output_length[0]进行一些调整
+      output_lengths[0] += 9;  // len("Index in ") == 9
+      writer.Divider(output_lengths);
+      writer.BeginRow();
+      writer.WriteHeaderCell("Index in " + (*table)->GetTableName(), output_lengths[0]);
+      writer.EndRow();
+      writer.Divider(output_lengths);
+
+      // 输出索引
+      for (auto index : indexes_info) {
+        writer.BeginRow();
+        writer.WriteCell(index->GetIndexName(), output_lengths[0]);
+        writer.EndRow();
+        writer.Divider(output_lengths);
+      }
+    }
+  }
+
   return DB_FAILED;
 }
 
