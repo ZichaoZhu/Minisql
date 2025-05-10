@@ -430,7 +430,7 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
   // 创建索引
   if (!primary_keys.empty()) {
     IndexInfo *index_info;
-    result = context->GetCatalog()->CreateIndex(table_info->GetTableName(), table_name + "_primary_key", primary_keys, context->GetTransaction(), index_info, "bptree");
+    result = context->GetCatalog()->CreateIndex(table_info->GetTableName(), table_name + "_primary_key", primary_keys, context->GetTransaction(), index_info, "btree");
   }
   if (result != DB_SUCCESS) {
     return result;
@@ -529,7 +529,7 @@ dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *conte
     }
   }
 
-  return DB_FAILED;
+  return DB_SUCCESS;
 }
 
 /**
@@ -539,7 +539,63 @@ dberr_t ExecuteEngine::ExecuteCreateIndex(pSyntaxNode ast, ExecuteContext *conte
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteCreateIndex" << std::endl;
 #endif
-  return DB_FAILED;
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+
+  // 提取语法树中的信息
+  string index_name = ast->child_->val_;
+  string table_name = ast->child_->next_->val_;
+  vector<string> index_keys;
+  pSyntaxNode indexes_list = ast->child_->next_->next_;
+  string index_type = "btree";
+
+  // 得到索引的列名
+  for (auto index = indexes_list->child_; index != nullptr; index = index->next_) {
+    index_keys.push_back(index->val_);
+  }
+
+  // 检查索引的类型
+  if (indexes_list->next_ != nullptr) {
+    index_type = indexes_list->next_->child_->val_;
+  }
+
+  //  创建索引
+  IndexInfo *index_info;
+  dberr_t result_create_index = context->GetCatalog()->CreateIndex(table_name, index_name, index_keys, context->GetTransaction(), index_info, index_type);
+
+  if (result_create_index != DB_SUCCESS) {
+    cout << "Create index error" << endl;
+    return result_create_index;
+  }
+
+  TableInfo *table_info;
+  dberr_t result_get_table = context->GetCatalog()->GetTable(table_name, table_info);
+  if (result_get_table != DB_SUCCESS) {
+    cout << "Get table error" << endl;
+    return result_get_table;
+  }
+
+  // 将数据插入索引
+  auto txn = context->GetTransaction();
+  auto table_heap = table_info->GetTableHeap();
+  for (auto row = table_heap->Begin(txn); row != table_heap->End(); row++) {
+    auto row_id = row->GetRowId();
+    // 获得相关的field
+    vector<Field> fields;
+    for (auto col : index_info->GetIndexKeySchema()->GetColumns()) {
+      fields.push_back(*(*row).GetField(col->GetTableInd()));
+    }
+    // 将行插入索引
+    Row row_idx(fields);
+    dberr_t result_insert_entry = index_info->GetIndex()->InsertEntry(row_idx, row_id, txn);
+    if (result_insert_entry != DB_SUCCESS) {
+      return result_insert_entry;
+    }
+  }
+  cout<<"index "<<index_name<<" created."<<endl;
+  return DB_SUCCESS;
 }
 
 /**
