@@ -446,7 +446,28 @@ dberr_t ExecuteEngine::ExecuteDropTable(pSyntaxNode ast, ExecuteContext *context
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteDropTable" << std::endl;
 #endif
- return DB_FAILED;
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+  // 首先，我们清理与表相关的索引
+  string table_name = ast->child_->val_;
+  // 先得到所有的索引信息
+  vector<IndexInfo *> indexes;
+  dberr_t result_get_index = context->GetCatalog()->GetTableIndexes(table_name, indexes);
+  if (result_get_index != DB_SUCCESS) {
+    return result_get_index;
+  }
+  // 删除所有的索引
+  for (auto index : indexes) {
+    dberr_t result_drop_index = context->GetCatalog()->DropIndex(table_name, index->GetIndexName());
+    if (result_drop_index != DB_SUCCESS) {
+      return result_drop_index;
+    }
+  }
+  // 然后，我们删除表格
+  dberr_t result_drop_table = context->GetCatalog()->DropTable(table_name);
+  return result_drop_table;
 }
 
 /**
