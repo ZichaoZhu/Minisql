@@ -17,6 +17,12 @@
 #include "planner/planner.h"
 #include "utils/utils.h"
 
+extern "C" {
+  int yyparse(void);
+#include "parser/minisql_lex.h"
+#include "parser/parser.h"
+}
+
 ExecuteEngine::ExecuteEngine() {
   char path[] = "./databases";
   DIR *dir;
@@ -663,7 +669,68 @@ dberr_t ExecuteEngine::ExecuteExecfile(pSyntaxNode ast, ExecuteContext *context)
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteExecfile" << std::endl;
 #endif
-  return DB_FAILED;
+  auto start_time = std::chrono::system_clock::now();
+
+  string filename = ast->child_->val_;
+  ifstream file(filename);
+  if (!file.is_open()) {
+    cout << "File " << filename << " not found: " << filename << endl;
+    return DB_FAILED;
+  }
+  char buffer[1024] = {};
+  char c;
+  int count = 0;
+  while (file.get(c)) {
+    buffer[count++] = c;
+    if (count > 1024) {
+      cout << "This sql request is too long, please try again" << endl;
+      return DB_FAILED;
+    }
+    if (c == ';') {
+      YY_BUFFER_STATE bp = yy_scan_string(buffer);
+      if (bp == nullptr) {
+        LOG(ERROR) << "Failed to create yy buffer state." << std::endl;
+        exit(1);
+      }
+      yy_switch_to_buffer(bp);
+
+      // init parser module
+      MinisqlParserInit();
+
+      // parse
+      yyparse();
+
+      // parse result handle
+      if (MinisqlParserGetError()) {
+        // error
+        printf("%s\n", MinisqlParserGetErrorMessage());
+      }
+
+      auto result = Execute(MinisqlGetParserRootNode());
+      if (result != DB_SUCCESS) {
+        return result;
+      }
+
+      // clean memory after parse
+      MinisqlParserFinish();
+      yy_delete_buffer(bp);
+      yylex_destroy();
+
+      // quit condition
+      ExecuteInformation(result);
+      if (result == DB_QUIT) {
+        break;
+      }
+
+      memset(buffer, 0, 1024);
+      count = 0;
+    }
+  }
+
+  auto stop_time = std::chrono::system_clock::now();
+  double duration_time = double((std::chrono::duration_cast<std::chrono::milliseconds>(stop_time - start_time)).count());
+  cout << "Executed in " << duration_time << " ms." << endl;
+  return DB_SUCCESS;
 }
 
 /**
@@ -673,5 +740,5 @@ dberr_t ExecuteEngine::ExecuteQuit(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteQuit" << std::endl;
 #endif
- return DB_FAILED;
+ return DB_QUIT;
 }
