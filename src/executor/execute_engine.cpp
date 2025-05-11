@@ -605,7 +605,34 @@ dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteDropIndex" << std::endl;
 #endif
-  return DB_FAILED;
+  if (current_db_.empty()) {
+    cout << "No database selected" << endl;
+    return DB_FAILED;
+  }
+  string index_name = ast->child_->val_;
+  string table_name;
+  vector<TableInfo *> tables_info;
+  vector<IndexInfo *> indexes_info;
+  dberr_t result_get_table = context->GetCatalog()->GetTables(tables_info);
+  if (result_get_table != DB_SUCCESS) {
+    cout << "Get table error" << endl;
+    return result_get_table;
+  }
+  for (auto table : tables_info) {
+    dberr_t result_get_index = context->GetCatalog()->GetTableIndexes(table_name, indexes_info);
+    for (auto index : indexes_info) {
+      if (index->GetIndexName() == index_name) {
+        dberr_t result_drop_index = context->GetCatalog()->DropIndex(table_name, index_name);
+        if (result_drop_index != DB_SUCCESS) {
+          cout << "Drop index " << index_name <<" error" << endl;
+        }else {
+          cout << "Drop index " << index_name <<" ok" << endl;
+        }
+        return result_drop_index;
+      }
+    }
+  }
+  return DB_INDEX_NOT_FOUND;
 }
 
 dberr_t ExecuteEngine::ExecuteTrxBegin(pSyntaxNode ast, ExecuteContext *context) {
