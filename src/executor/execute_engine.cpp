@@ -354,8 +354,8 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
     cout << "No database selected" << endl;
     return DB_FAILED;
   }
-  string table_name = ast->child_->val_;
 
+  string table_name = ast->child_->val_;
   pSyntaxNode column_list = ast->child_->next_;
   vector<string> column_names;
   vector<TypeId> column_types;
@@ -363,10 +363,12 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
   vector<uint32_t> column_index;
   uint32_t col_index = 0;
   vector<bool> column_is_unique;
-
   vector<string> primary_keys;
+  vector<string> unique_keys;
+
   // 遍历column子树
   for (auto col = column_list->child_; col != nullptr; col = col->next_) {
+    // 得到column的属性
     if (col->type_ == kNodeColumnDefinition) {
       auto col_attributes = col->child_;
       string col_name;
@@ -376,7 +378,10 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
 
       col_name = col_attributes->val_;
       col_attributes = col_attributes->next_;
-      col_is_unique = strcmp(col_attributes->val_, "unique") == 0;
+      if (col->val_ != nullptr && strcmp(col->val_, "unique") == 0) {
+        col_is_unique = true;
+        unique_keys.push_back(col_name);
+      }
 
       // 获取类型
       string type = col_attributes->val_;
@@ -386,8 +391,10 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
         col_type = kTypeFloat;
       }else if (type == "char") {
         col_type = kTypeChar;
+        bool len_valid = (string(col_attributes->child_->val_).find('.') == string::npos) &&
+                         (string(col_attributes->child_->val_).find('-') == string::npos);
         col_length = atoi(col_attributes->child_->val_);
-        if (col_length <=0) {
+        if (col_length <=0 || !len_valid) {
           cout << "Invalid char length." << endl;
           return DB_FAILED;
         }
@@ -402,11 +409,13 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
       column_index.push_back(col_index++);
       column_is_unique.push_back(col_is_unique);
     }
+    // 处理priamry key的情况
     else if (col->type_ == kNodeColumnList) {
       auto col_attributes = col->child_;
       while (col_attributes != nullptr && col_attributes->type_ == kNodeIdentifier) {
         string primary_key = col_attributes->val_;
         primary_keys.push_back(primary_key);
+        col_attributes = col_attributes->next_;
       }
     }
   }
@@ -434,15 +443,24 @@ dberr_t ExecuteEngine::ExecuteCreateTable(pSyntaxNode ast, ExecuteContext *conte
     return result;
   }
   // 创建索引
+  // 创建primary key的
   if (!primary_keys.empty()) {
     IndexInfo *index_info;
     result = context->GetCatalog()->CreateIndex(table_info->GetTableName(), table_name + "_primary_key", primary_keys, context->GetTransaction(), index_info, "btree");
   }
   if (result != DB_SUCCESS) {
     return result;
-    cout << "table " << table_info->GetTableName() << " created" << endl;
   }
-  return DB_FAILED;
+  // 创建unique的
+  for (auto unique_key : unique_keys) {
+    IndexInfo *index_info;
+    result = context->GetCatalog()->CreateIndex(table_info->GetTableName(), table_name + "_unique_key_" + unique_key, {unique_key}, context->GetTransaction(), index_info, "btree");
+    if (result != DB_SUCCESS) {
+      return result;
+    }
+  }
+
+  return DB_SUCCESS;
 }
 
 /**
@@ -534,6 +552,7 @@ dberr_t ExecuteEngine::ExecuteShowIndexes(pSyntaxNode ast, ExecuteContext *conte
       }
     }
   }
+  cout << ss.str();ss << endl;
 
   return DB_SUCCESS;
 }
@@ -625,6 +644,7 @@ dberr_t ExecuteEngine::ExecuteDropIndex(pSyntaxNode ast, ExecuteContext *context
     return result_get_table;
   }
   for (auto table : tables_info) {
+    table_name = table->GetTableName();
     dberr_t result_get_index = context->GetCatalog()->GetTableIndexes(table_name, indexes_info);
     for (auto index : indexes_info) {
       if (index->GetIndexName() == index_name) {
@@ -740,5 +760,6 @@ dberr_t ExecuteEngine::ExecuteQuit(pSyntaxNode ast, ExecuteContext *context) {
 #ifdef ENABLE_EXECUTE_DEBUG
   LOG(INFO) << "ExecuteQuit" << std::endl;
 #endif
- return DB_QUIT;
+  current_db_ = "";
+  return DB_QUIT;
 }
