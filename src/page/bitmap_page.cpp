@@ -7,7 +7,29 @@
  */
 template <size_t PageSize>
 bool BitmapPage<PageSize>::AllocatePage(uint32_t &page_offset) {
-  return false;
+  if (page_allocated_ == GetMaxSupportedSize()) {
+    return false;
+  } else {
+    uint32_t byte_index = next_free_page_ / 8;
+    uint8_t bit_index = next_free_page_ % 8;
+    uint8_t bit = 1 << bit_index;
+    page_offset = next_free_page_;
+    bytes[byte_index] = bytes[byte_index] | bit;
+    page_allocated_++;
+    if (page_allocated_ == GetMaxSupportedSize()) {
+      next_free_page_ = GetMaxSupportedSize();
+      return true;
+    } else {
+      for (uint32_t i = next_free_page_ + 1; i < GetMaxSupportedSize(); i++) {
+        if (IsPageFree(i)) {
+          next_free_page_ = i;
+          return true;
+        }
+      }
+      next_free_page_ = GetMaxSupportedSize();
+      return true;
+    }
+  }
 }
 
 /**
@@ -15,7 +37,21 @@ bool BitmapPage<PageSize>::AllocatePage(uint32_t &page_offset) {
  */
 template <size_t PageSize>
 bool BitmapPage<PageSize>::DeAllocatePage(uint32_t page_offset) {
-  return false;
+  if (page_offset >= GetMaxSupportedSize()) {
+    return false;
+  } else if (IsPageFree(page_offset)) {
+    return false;
+  } else {
+    page_allocated_--;
+    if (page_offset < next_free_page_) {
+      next_free_page_ = page_offset;
+    }
+    uint32_t byte_index = page_offset / 8;
+    uint8_t bit_index = page_offset % 8;
+    uint8_t bit = 1 << bit_index;
+    bytes[byte_index] = bytes[byte_index] & (~bit);
+    return true;
+  }
 }
 
 /**
@@ -23,12 +59,28 @@ bool BitmapPage<PageSize>::DeAllocatePage(uint32_t page_offset) {
  */
 template <size_t PageSize>
 bool BitmapPage<PageSize>::IsPageFree(uint32_t page_offset) const {
-  return false;
+  if (page_offset < GetMaxSupportedSize()) {
+    uint32_t byte_index = page_offset / 8;
+    uint8_t bit_index = page_offset % 8;
+    return IsPageFreeLow(byte_index, bit_index);
+  } else {
+    return false;
+  }
 }
 
 template <size_t PageSize>
 bool BitmapPage<PageSize>::IsPageFreeLow(uint32_t byte_index, uint8_t bit_index) const {
-  return false;
+  if (byte_index < MAX_CHARS) {
+    uint8_t byte = bytes[byte_index];
+    uint8_t bit = 1 << bit_index;
+    if ((byte & bit) == 0) {
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    return false;
+  }
 }
 
 template class BitmapPage<64>;
