@@ -33,7 +33,35 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
   // 2.     If R is dirty, write it back to the disk.
   // 3.     Delete R from the page table and insert P.
   // 4.     Update P's metadata, read in the page content from disk, and then return a pointer to P.
-  return nullptr;
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
+  if (page_table_.count(page_id) != 0) {
+    frame_id_t frame_id = page_table_[page_id];
+    Page *page = &pages_[frame_id];
+    page->pin_count_++;
+    replacer_->Pin(frame_id);
+    return page;
+  }
+  frame_id_t frame_id = TryToFindFreePage();
+  if (frame_id == INVALID_FRAME_ID) {
+    if (replacer_->Victim(&frame_id)) {
+      Page *page = &pages_[frame_id];
+      if (page->IsDirty()) {
+        disk_manager_->WritePage(page->GetPageId(), page->GetData());
+      }
+      page_table_.erase(page->GetPageId());
+      replacer_->Pin(frame_id);
+    } else {
+      return nullptr;
+    }
+  }
+  Page *page = &pages_[frame_id];
+  page->ResetMemory();
+  page->is_dirty_ = false;
+  page->page_id_ = page_id;
+  page->pin_count_ = 1;
+  page_table_[page_id] = frame_id;
+  disk_manager_->ReadPage(page_id, page->data_);
+  return page;
 }
 
 /**
@@ -45,7 +73,32 @@ Page *BufferPoolManager::NewPage(page_id_t &page_id) {
   // 2.   Pick a victim page P from either the free list or the replacer. Always pick from the free list first.
   // 3.   Update P's metadata, zero out memory and add P to the page table.
   // 4.   Set the page ID output parameter. Return a pointer to P.
-  return nullptr;
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
+  page_id = AllocatePage();
+  if (page_id == INVALID_PAGE_ID) {
+    return nullptr;
+  }
+  frame_id_t frame_id = TryToFindFreePage();
+  if (frame_id == INVALID_FRAME_ID) {
+    if (replacer_->Victim(&frame_id)) {
+      Page *page = &pages_[frame_id];
+      if (page->IsDirty()) {
+        disk_manager_->WritePage(page->GetPageId(), page->GetData());
+      }
+      page_table_.erase(page->GetPageId());
+      replacer_->Pin(frame_id);
+    } else {
+      DeallocatePage(page_id);
+      return nullptr;
+    }
+  }
+  Page *page = &pages_[frame_id];
+  page->ResetMemory();
+  page->is_dirty_ = false;
+  page->page_id_ = page_id;
+  page->pin_count_ = 1;
+  page_table_[page_id] = frame_id;
+  return page;
 }
 
 /**
@@ -57,21 +110,74 @@ bool BufferPoolManager::DeletePage(page_id_t page_id) {
   // 1.   If P does not exist, return true.
   // 2.   If P exists, but has a non-zero pin-count, return false. Someone is using the page.
   // 3.   Otherwise, P can be deleted. Remove P from the page table, reset its metadata and return it to the free list.
-  return false;
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
+  if (page_table_.count(page_id) == 0) {
+    DeallocatePage(page_id);
+    return true;
+  } else {
+    frame_id_t frame_id = page_table_[page_id];
+    Page *page = &pages_[frame_id];
+    if (page->GetPinCount() > 0) {
+      return false;
+    } else {
+      page_table_.erase(page_id);
+      replacer_->Pin(frame_id);
+      page->ResetMemory();
+      page->page_id_ = INVALID_PAGE_ID;
+      page->is_dirty_ = false;
+      page->pin_count_ = 0;
+      free_list_.push_back(frame_id);
+      DeallocatePage(page_id);
+      return true;
+    }
+  }
 }
 
 /**
  * TODO: Student Implement
  */
 bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
-  return false;
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
+  if (page_table_.count(page_id) == 0) {
+    return false;
+  } else {
+    frame_id_t frame_id = page_table_[page_id];
+    Page *page = &pages_[frame_id];
+    if (page->GetPinCount() == 0) {
+      return false;
+    } else if (page->GetPinCount() == 1) {
+      replacer_->Unpin(frame_id);
+      if (page->is_dirty_ == false) {
+        page->is_dirty_ = is_dirty;
+      }
+      page->pin_count_--;
+      return true;
+    } else {
+      if (page->is_dirty_ == false) {
+        page->is_dirty_ = is_dirty;
+      }
+      page->pin_count_--;
+      return true;
+    }
+  }
 }
 
 /**
  * TODO: Student Implement
  */
 bool BufferPoolManager::FlushPage(page_id_t page_id) {
-  return false;
+  std::scoped_lock<std::recursive_mutex> lock(latch_);
+  if (page_table_.count(page_id) == 0) {
+    return false;
+  } else {
+    frame_id_t frame_id = page_table_[page_id];
+    Page *page = &pages_[frame_id];
+    page->WLatch();
+    disk_manager_->WritePage(page_id, page->GetData());
+    page->is_dirty_ = false;
+    page->WUnlatch();
+    return true;
+  }
 }
 
 page_id_t BufferPoolManager::AllocatePage() {
@@ -83,8 +189,16 @@ void BufferPoolManager::DeallocatePage(__attribute__((unused)) page_id_t page_id
   disk_manager_->DeAllocatePage(page_id);
 }
 
-bool BufferPoolManager::IsPageFree(page_id_t page_id) {
-  return disk_manager_->IsPageFree(page_id);
+bool BufferPoolManager::IsPageFree(page_id_t page_id) { return disk_manager_->IsPageFree(page_id); }
+
+frame_id_t BufferPoolManager::TryToFindFreePage() {
+  if (free_list_.empty() == 0) {
+    frame_id_t frame_id = free_list_.front();
+    free_list_.pop_front();
+    return frame_id;
+  } else {
+    return INVALID_FRAME_ID;
+  }
 }
 
 // Only used for debug
