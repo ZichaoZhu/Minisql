@@ -105,14 +105,17 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
   }
   table_id_t table_id = catalog_meta_->GetNextTableId();
   page_id_t page_id;
+
   Page *page = buffer_pool_manager_->NewPage(page_id);
   if (page == nullptr) {
     return DB_FAILED;
   }
   // table meta
-  TableMetadata *table_meta = TableMetadata::Create(table_id, table_name, INVALID_PAGE_ID, schema);
+  Schema *table_schema = Schema::DeepCopySchema(schema);
+  TableMetadata *table_meta = TableMetadata::Create(table_id, table_name, INVALID_PAGE_ID, table_schema);
   table_meta->SerializeTo(page->GetData());
   buffer_pool_manager_->UnpinPage(page_id, true);
+
   // table heap info
   TableHeap *table_heap = TableHeap::Create(buffer_pool_manager_, schema, txn, log_manager_, lock_manager_);
   table_info = TableInfo::Create();
@@ -192,7 +195,10 @@ dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string 
   index_info = IndexInfo::Create();
   index_info->Init(index_meta, table_info, buffer_pool_manager_);
   index_meta->SerializeTo(page->GetData());
-  buffer_pool_manager_->UnpinPage(page_id, true);
+  if (buffer_pool_manager_->UnpinPage(page_id, true) == false) {
+    delete index_info;
+    return DB_FAILED;
+  }
 
   // catalog
   index_names_[table_name][index_name] = index_id;
@@ -318,7 +324,7 @@ dberr_t CatalogManager::FlushCatalogMetaPage() const {
 dberr_t CatalogManager::LoadTable(const table_id_t table_id, const page_id_t page_id) {
   // table meta
   Page *page = buffer_pool_manager_->FetchPage(page_id);
-  TableMetadata *table_meta;
+  TableMetadata *table_meta = nullptr;
   TableMetadata::DeserializeFrom(page->GetData(), table_meta);
   // table heap
   TableHeap *table_heap = TableHeap::Create(buffer_pool_manager_, table_meta->GetFirstPageId(), table_meta->GetSchema(),
@@ -339,7 +345,7 @@ dberr_t CatalogManager::LoadTable(const table_id_t table_id, const page_id_t pag
 dberr_t CatalogManager::LoadIndex(const index_id_t index_id, const page_id_t page_id) {
   // index meta
   Page *page = buffer_pool_manager_->FetchPage(page_id);
-  IndexMetadata *index_meta;
+  IndexMetadata *index_meta = nullptr;
   IndexMetadata::DeserializeFrom(page->GetData(), index_meta);
   table_id_t table_id = index_meta->GetTableId();
   // table not exist
