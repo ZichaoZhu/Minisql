@@ -5,6 +5,7 @@
 #include <mutex>
 #include <unordered_set>
 #include <vector>
+#include <unordered_map>
 
 #include "buffer/replacer.h"
 #include "common/config.h"
@@ -35,9 +36,10 @@ class LRUReplacer : public Replacer {
 
   size_t Size() override;
 
-private:
+ private:
   // add your own private member variables here
-  vector<frame_id_t> lru_list_;
+  list<frame_id_t> list_;
+  unordered_map<frame_id_t, list<frame_id_t>::iterator> map_;
   size_t capacity;
 };
 
