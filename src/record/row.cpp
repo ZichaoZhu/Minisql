@@ -1,5 +1,5 @@
 #include "record/row.h"
-
+#include <bitset>
 /**
  * TODO: Student Implement
  */

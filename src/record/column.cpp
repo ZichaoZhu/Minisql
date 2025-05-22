@@ -82,7 +82,7 @@ uint32_t Column::GetSerializedSize() const {
    * | COLUMN_MAGIC_NUM | name_len | name | type | len | table_ind | nullable | unique |
    * 此时我们认为column已知
    */
-  uint32_t len = sizeof(COLUMN_MAGIC_NUM) + sizeof(size_t) + len_ + sizeof(type_) +
+  uint32_t len = sizeof(COLUMN_MAGIC_NUM) + sizeof(size_t) + name_.length() + sizeof(type_) +
                  sizeof(len_) + sizeof(table_ind_) + sizeof(nullable_) + sizeof(unique_);
   return len;
 }
