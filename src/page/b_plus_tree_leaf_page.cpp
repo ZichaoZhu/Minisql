@@ -205,6 +205,7 @@ void LeafPage::Init(page_id_t page_id, page_id_t parent_id, int key_size, int ma
   SetMaxSize(max_size);
   SetPageType(IndexPageType::LEAF_PAGE);
   SetSize(0);
+  SetNextPageId(INVALID_PAGE_ID);
 }
 
 /**
@@ -338,8 +339,7 @@ void LeafPage::CopyNFrom(void *src, int size)
 bool LeafPage::Lookup(const GenericKey *key, RowId &value, const KeyManager &KM)
 {
   int index = KeyIndex(key, KM);
-  int cmp = KM.CompareKeys(KeyAt(index), key);
-  if (index < GetSize() && cmp == 0)
+  if (index < GetSize() && KM.CompareKeys(KeyAt(index), key) == 0)
   {
     value = ValueAt(index);
     return true;
