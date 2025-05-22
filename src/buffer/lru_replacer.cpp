@@ -8,11 +8,12 @@ LRUReplacer::~LRUReplacer() = default;
  * TODO: Student Implement
  */
 bool LRUReplacer::Victim(frame_id_t *frame_id) {
-  if (lru_list_.empty()) {
+  if (map_.empty()) {
     return false;
   } else {
-    *frame_id = lru_list_[0];
-    lru_list_.erase(lru_list_.begin());
+    *frame_id = list_.back();
+    list_.pop_back();
+    map_.erase(*frame_id);
     return true;
   }
 }
@@ -21,28 +22,31 @@ bool LRUReplacer::Victim(frame_id_t *frame_id) {
  * TODO: Student Implement
  */
 void LRUReplacer::Pin(frame_id_t frame_id) {
-  for (size_t i = 0; i < lru_list_.size(); i++) {
-    if (lru_list_[i] == frame_id) {
-      lru_list_.erase(lru_list_.begin() + i);
-    }
+  if (map_.find(frame_id) == map_.end()) {
+    return;
   }
+  auto iter = map_[frame_id];
+  map_.erase(frame_id);
+  list_.erase(iter);
 }
 
 /**
  * TODO: Student Implement
  */
 void LRUReplacer::Unpin(frame_id_t frame_id) {
-  if (lru_list_.size() < capacity) {
-    for (size_t i = 0; i < lru_list_.size(); i++) {
-      if (lru_list_[i] == frame_id) {
-        return;
-      }
-    }
-    lru_list_.push_back(frame_id);
+  if (map_.find(frame_id) != map_.end()) {
+    return;
   }
+  if (map_.size() == capacity) {
+    frame_id_t delete_frame_id = list_.back();
+    list_.pop_back();
+    map_.erase(delete_frame_id);
+  }
+  list_.push_front(frame_id);
+  map_[frame_id] = list_.begin();
 }
 
 /**
  * TODO: Student Implement
  */
-size_t LRUReplacer::Size() { return lru_list_.size(); }
+size_t LRUReplacer::Size() { return map_.size(); }
