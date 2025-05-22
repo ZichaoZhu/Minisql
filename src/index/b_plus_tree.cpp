@@ -492,14 +492,13 @@ bool BPlusTree::InsertIntoLeaf(GenericKey *key, const RowId &value, Txn *transac
     return false;
   auto node = reinterpret_cast<LeafPage *>(page->GetData());
   RowId res;
-
   if (node->Lookup(key, res, processor_))
   {
     buffer_pool_manager_->UnpinPage(page->GetPageId(), false);
     return false;
   }
   else
-    node->Insert(key, res, processor_);
+    node->Insert(key, value, processor_);
 
   if (node->GetSize() > leaf_max_size_)
   {
