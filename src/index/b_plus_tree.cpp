@@ -868,7 +868,6 @@ Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool lef
       next_page_id = internal->Lookup(key, processor_);
     }
 
-		buffer_pool_manager_->UnpinPage(page_id, false);
     page = buffer_pool_manager_->FetchPage(next_page_id);
     node = reinterpret_cast<BPlusTreePage *>(page->GetData());
     buffer_pool_manager_->UnpinPage(next_page_id, false);
