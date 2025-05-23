@@ -366,6 +366,10 @@ BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager
       leaf_max_size_(leaf_max_size),
       internal_max_size_(internal_max_size)
 {
+  if (!leaf_max_size)
+    leaf_max_size_ = (PAGE_SIZE - LEAF_PAGE_HEADER_SIZE) / (processor_.GetKeySize() + sizeof(RowId)) - 1;
+  if (!internal_max_size)
+    internal_max_size_ = (PAGE_SIZE - INTERNAL_PAGE_HEADER_SIZE) / (processor_.GetKeySize() + sizeof(page_id_t)) - 1;
   auto page = buffer_pool_manager_->FetchPage(INDEX_ROOTS_PAGE_ID);
   auto root = reinterpret_cast<IndexRootsPage *>(page->GetData());
   root->GetRootId(index_id_, &root_page_id_);
@@ -376,6 +380,10 @@ BPlusTree::BPlusTree(index_id_t index_id, BufferPoolManager *buffer_pool_manager
 void BPlusTree::Destroy(page_id_t current_page_id)
 {
   if (IsEmpty()) return;
+  if (current_page_id == INVALID_PAGE_ID)
+  {
+    current_page_id = root_page_id_;
+  }
   auto page = buffer_pool_manager_->FetchPage(current_page_id);
   auto node = reinterpret_cast<BPlusTreePage *>(page->GetData());
   if (node->IsLeafPage())
@@ -522,7 +530,7 @@ BPlusTreeInternalPage* BPlusTree::Split(InternalPage *node, Txn *transaction)
   auto page_ = buffer_pool_manager_->NewPage(new_page_id);
   if (page_ == nullptr)
     throw std::runtime_error("Out of memory");
-  auto node_ = reinterpret_cast<InternalPage *>(page_);
+  auto node_ = reinterpret_cast<InternalPage *>(page_->GetData());
   node_->Init(new_page_id, node->GetParentPageId(),processor_.GetKeySize(),internal_max_size_);
   node->MoveHalfTo(node_, buffer_pool_manager_);
   buffer_pool_manager_->UnpinPage(new_page_id, true);
