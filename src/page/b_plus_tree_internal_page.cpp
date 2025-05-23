@@ -206,10 +206,11 @@ void InternalPage::Init(page_id_t page_id, page_id_t parent_id, int key_size, in
 {
   SetPageType(IndexPageType::INTERNAL_PAGE);
   SetSize(0);
-  SetPageId(page_id);
-  SetParentPageId(parent_id);
   SetKeySize(key_size);
   SetMaxSize(max_size);
+  SetPageId(page_id);
+  SetParentPageId(parent_id);
+  SetLSN();
 }
 /*
  * Helper method to get/set the key associated with input "index"(a.k.a
@@ -257,19 +258,34 @@ void InternalPage::PairCopy(void *dest, void *src, int pair_num) {
  */
 page_id_t InternalPage::Lookup(const GenericKey *key, const KeyManager &KM)
 {
-  int l = 1, r = GetSize() - 1;
-  while (l <= r)
+  int left = 1;
+  int right = GetSize() - 1;
+  while (left <= right)
   {
-    int mid = (l + r)/2;
-    int result = KM.CompareKeys(KeyAt(mid), key);
-    if (result == 0)
+    int mid =  (right + left) / 2;
+    int cmp = KM.CompareKeys(KeyAt(mid), key);
+    if (cmp == 0)
+    {
       return ValueAt(mid);
-    else if (result < 0)
-      l = mid + 1;
-    else
-      r = mid - 1;
+    }
+    else if (cmp > 0)
+    {
+      if (mid == 1 || KM.CompareKeys(KeyAt(mid - 1), key) <= 0)
+      {
+        return ValueAt(mid - 1);
+      }
+      right = mid - 1;
+    }
+    else if (cmp < 0)
+    {
+      if (mid == GetSize() - 1 || KM.CompareKeys(KeyAt(mid + 1), key) > 0)
+      {
+        return ValueAt(mid);
+      }
+      left = mid + 1;
+    }
   }
-  return ValueAt(l - 1);
+  return INVALID_PAGE_ID;
 }
 
 /*****************************************************************************
@@ -330,6 +346,8 @@ void InternalPage::CopyNFrom(void *src, int size, BufferPoolManager *buffer_pool
     for(int i = GetSize() - size; i < GetSize(); i++)
     {
       auto page = buffer_pool_manager->FetchPage(ValueAt(i));
+      if (page == nullptr) 
+        throw std::runtime_error("FetchPage returned nullptr in CopyNFrom");
       auto node = reinterpret_cast<BPlusTreePage *>(page->GetData());
       node->SetParentPageId(GetPageId());
       buffer_pool_manager->UnpinPage(ValueAt(i),true);

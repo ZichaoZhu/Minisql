@@ -359,8 +359,7 @@ bool LeafPage::Lookup(const GenericKey *key, RowId &value, const KeyManager &KM)
 int LeafPage::RemoveAndDeleteRecord(const GenericKey *key, const KeyManager &KM)
 {
   int index = KeyIndex(key, KM);
-  int cmp = KM.CompareKeys(KeyAt(index), key);
-  if (index < GetSize() && cmp == 0)
+  if (index < GetSize() && KM.CompareKeys(KeyAt(index), key) == 0)
   {
     if (index < GetSize() - 1)
     {
