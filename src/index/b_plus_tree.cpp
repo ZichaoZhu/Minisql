@@ -845,12 +845,16 @@ Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool lef
   {
 		page_id = root_page_id_;
 	}
+  if(root_page_id_ < 0) {
+    return nullptr;
+  }
 	auto page = buffer_pool_manager_->FetchPage(page_id);
 	if (page == nullptr)
   {
 		return nullptr;
 	}
 	auto node = reinterpret_cast<BPlusTreePage *>(page->GetData());
+  buffer_pool_manager_->UnpinPage(page_id, false);
   while (!node->IsLeafPage())
   {
     auto internal = reinterpret_cast<BPlusTreeInternalPage *>(node);
@@ -867,6 +871,7 @@ Page *BPlusTree::FindLeafPage(const GenericKey *key, page_id_t page_id, bool lef
 		buffer_pool_manager_->UnpinPage(page_id, false);
     page = buffer_pool_manager_->FetchPage(next_page_id);
     node = reinterpret_cast<BPlusTreePage *>(page->GetData());
+    buffer_pool_manager_->UnpinPage(next_page_id, false);
 	}
 
   return page;
