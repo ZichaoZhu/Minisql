@@ -34,6 +34,7 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
   // 3.     Delete R from the page table and insert P.
   // 4.     Update P's metadata, read in the page content from disk, and then return a pointer to P.
   std::scoped_lock<std::recursive_mutex> lock(latch_);
+  // assert page id>0
   ASSERT(page_id >= 0, "Invalid page id.");
   // in the buffer
   if (page_table_.count(page_id) != 0) {
