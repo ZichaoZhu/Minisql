@@ -58,7 +58,7 @@ TableIterator &TableIterator::operator++() {
   auto page = reinterpret_cast<TablePage *>(table_heap_->buffer_pool_manager_->FetchPage(rid_.GetPageId()));
   if (page == nullptr) {
     table_heap_ = nullptr;
-    rid_ = RowId();
+    rid_ = RowId(INVALID_ROWID);
     txn_ = nullptr;
     return *this;
   }
@@ -67,26 +67,35 @@ TableIterator &TableIterator::operator++() {
   // 检测能不能找到next，找不到则去下一张page找
   if (get_tuple) {
     rid_ = next_rid;
-  } else {  // step 2: 找next_page
-    // 检测next_page是不是空的
-    if (page->GetNextPageId() != INVALID_PAGE_ID) {
-      auto next_page = reinterpret_cast<TablePage *>(table_heap_->buffer_pool_manager_->FetchPage(page->GetNextPageId()));
-      if (page->GetFirstTupleRid(&next_rid)) {
-        rid_ = next_rid;
-      } else {
-        table_heap_ = nullptr;
-        rid_ = RowId();
-        txn_ = nullptr;
-      }
-      table_heap_->buffer_pool_manager_->UnpinPage(next_page->GetTablePageId(), false);
-    } else {
-      table_heap_ = nullptr;
-      rid_ = RowId(INVALID_ROWID);
-      txn_ = nullptr;
-      return *this;
-    }
+    return *this;
   }
+  // step 2: 找next_page
+  // 检测next_page是不是空的
+  if (page->GetNextPageId() == INVALID_PAGE_ID) {
+    table_heap_ = nullptr;
+    rid_ = RowId(INVALID_ROWID);
+    txn_ = nullptr;
+    return *this;
+  }
+  page = reinterpret_cast<TablePage *>(table_heap_->buffer_pool_manager_->FetchPage(page->GetNextPageId()));
+  // step 3: 找next_page的第一个tuple
+  if (page == nullptr) {
+    table_heap_ = nullptr;
+    rid_ = RowId(INVALID_ROWID);
+    txn_ = nullptr;
+    return *this;
+  }
+  // 检测能不能找到next_page的第一个tuple
+  get_tuple = page->GetFirstTupleRid(&next_rid);
   table_heap_->buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
+  if (!get_tuple) {
+    table_heap_ = nullptr;
+    rid_ = RowId(INVALID_ROWID);
+    txn_ = nullptr;
+    return *this;
+  }else {
+    rid_ = next_rid;
+  }
   return *this;
 }
 

@@ -162,18 +162,21 @@ TEST(TableIteratorTest, PreIncrementOperatorTest) {
   auto schema = new Schema(columns);
   TableHeap *table_heap = TableHeap::Create(bpm_, schema, nullptr, nullptr, nullptr);
 
-  RowId rid(0, 0);
-  Fields fields1 = {Field(TypeId::kTypeInt, 123)};
-  Row row1(fields1);
-  Fields fields2 = {Field(TypeId::kTypeInt, 789)};
-  Row row2(fields2);
-  table_heap->InsertTuple(row1, nullptr);
-  table_heap->InsertTuple(row2, nullptr);
+  // 插入大量数据
+  int N = 1000;
+  for (int i = 0; i < N; i++) {
+    Fields fields = {Field(TypeId::kTypeInt, i)};
+    Row row(fields);
+    table_heap->InsertTuple(row, nullptr);
+  }
 
-  TableIterator iter(table_heap, rid, nullptr);
-
-  ASSERT_TRUE(iter->GetRowId() == rid);
-  ASSERT_FALSE((++iter)->GetRowId() == rid);
+  TableIterator iter(table_heap, RowId(0, 0), nullptr);
+  int count = 0;
+  while (count < N) {
+    ASSERT_TRUE(iter->GetField(0)->CompareEquals(Field(TypeId::kTypeInt, count)));
+    ++iter;
+    count++;
+  }
 
   delete table_heap;
   delete bpm_;
@@ -190,21 +193,24 @@ TEST(TableIteratorTest, PostIncrementOperatorTest) {
   auto schema = new Schema(columns);
   TableHeap *table_heap = TableHeap::Create(bpm_, schema, nullptr, nullptr, nullptr);
 
-  RowId rid(0, 0);
-  Fields fields1 = {Field(TypeId::kTypeInt, 123)};
-  Row row1(fields1);
-  Fields fields2 = {Field(TypeId::kTypeInt, 789)};
-  Row row2(fields2);
-  table_heap->InsertTuple(row1, nullptr);
-  table_heap->InsertTuple(row2, nullptr);
+  // 插入大量数据
+  int N = 1000;
+  for (int i = 0; i < N; i++) {
+    Fields fields = {Field(TypeId::kTypeInt, i)};
+    Row row(fields);
+    table_heap->InsertTuple(row, nullptr);
+  }
 
-  TableIterator iter(table_heap, rid, nullptr);
-
-  ASSERT_TRUE((iter++)->GetRowId() == rid);
-  ASSERT_FALSE(iter->GetRowId() == rid);
+  TableIterator iter(table_heap, RowId(0, 0), nullptr);
+  int count = 0;
+  while (count < N) {
+    ASSERT_TRUE((iter++)->GetField(0)->CompareEquals(Field(TypeId::kTypeInt, count)));
+    count++;
+  }
 
   delete table_heap;
   delete bpm_;
   delete disk_mgr_;
   delete schema;
 }
+
