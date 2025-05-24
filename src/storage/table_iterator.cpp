@@ -69,7 +69,7 @@ TableIterator &TableIterator::operator++() {
     rid_ = next_rid;
   } else {  // step 2: 找next_page
     // 检测next_page是不是空的
-    if (page->GetNextPageId() >= 0) {
+    if (page->GetNextPageId() != INVALID_PAGE_ID) {
       auto next_page = reinterpret_cast<TablePage *>(table_heap_->buffer_pool_manager_->FetchPage(page->GetNextPageId()));
       if (page->GetFirstTupleRid(&next_rid)) {
         rid_ = next_rid;
@@ -81,8 +81,9 @@ TableIterator &TableIterator::operator++() {
       table_heap_->buffer_pool_manager_->UnpinPage(next_page->GetTablePageId(), false);
     } else {
       table_heap_ = nullptr;
-      rid_ = RowId();
+      rid_ = RowId(INVALID_ROWID);
       txn_ = nullptr;
+      return *this;
     }
   }
   table_heap_->buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
