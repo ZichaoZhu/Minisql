@@ -9,8 +9,11 @@ LRUReplacer::~LRUReplacer() = default;
  */
 bool LRUReplacer::Victim(frame_id_t *frame_id) {
   if (map_.empty()) {
+    // is empty
+    *frame_id = INVALID_FRAME_ID;
     return false;
   } else {
+    // pop the back
     *frame_id = list_.back();
     list_.pop_back();
     map_.erase(*frame_id);
@@ -37,12 +40,14 @@ void LRUReplacer::Unpin(frame_id_t frame_id) {
   if (map_.find(frame_id) != map_.end()) {
     return;
   }
+  // pop the back, insert in the front
   if (map_.size() == capacity) {
     frame_id_t delete_frame_id = list_.back();
     list_.pop_back();
     map_.erase(delete_frame_id);
   }
   list_.push_front(frame_id);
+  // record the iterator
   map_[frame_id] = list_.begin();
 }
 
