@@ -35,6 +35,7 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
   // 4.     Update P's metadata, read in the page content from disk, and then return a pointer to P.
   std::scoped_lock<std::recursive_mutex> lock(latch_);
   ASSERT(page_id >= 0, "Invalid page id.");
+  // in the buffer
   if (page_table_.count(page_id) != 0) {
     frame_id_t frame_id = page_table_[page_id];
     Page *page = &pages_[frame_id];
@@ -42,10 +43,14 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
     replacer_->Pin(frame_id);
     return page;
   }
+  // not in the buffer
+  // find free page
   frame_id_t frame_id = TryToFindFreePage();
+  // no free page, victim
   if (frame_id == INVALID_FRAME_ID) {
     if (replacer_->Victim(&frame_id)) {
       Page *page = &pages_[frame_id];
+      // dirty, write back
       if (page->IsDirty()) {
         disk_manager_->WritePage(page->GetPageId(), page->GetData());
       }
@@ -55,6 +60,7 @@ Page *BufferPoolManager::FetchPage(page_id_t page_id) {
       return nullptr;
     }
   }
+  // insert
   Page *page = &pages_[frame_id];
   page->ResetMemory();
   page->is_dirty_ = false;
@@ -79,10 +85,13 @@ Page *BufferPoolManager::NewPage(page_id_t &page_id) {
   if (page_id == INVALID_PAGE_ID) {
     return nullptr;
   }
+  // find free
   frame_id_t frame_id = TryToFindFreePage();
+  // no free, victim
   if (frame_id == INVALID_FRAME_ID) {
     if (replacer_->Victim(&frame_id)) {
       Page *page = &pages_[frame_id];
+      // dirty, write back
       if (page->IsDirty()) {
         disk_manager_->WritePage(page->GetPageId(), page->GetData());
       }
@@ -93,6 +102,7 @@ Page *BufferPoolManager::NewPage(page_id_t &page_id) {
       return nullptr;
     }
   }
+  // reset
   Page *page = &pages_[frame_id];
   page->ResetMemory();
   page->is_dirty_ = false;
@@ -113,14 +123,18 @@ bool BufferPoolManager::DeletePage(page_id_t page_id) {
   // 3.   Otherwise, P can be deleted. Remove P from the page table, reset its metadata and return it to the free list.
   std::scoped_lock<std::recursive_mutex> lock(latch_);
   if (page_table_.count(page_id) == 0) {
+    // not exist
     DeallocatePage(page_id);
     return true;
   } else {
+    // exist
     frame_id_t frame_id = page_table_[page_id];
     Page *page = &pages_[frame_id];
+    // pincunt>0, false
     if (page->GetPinCount() > 0) {
       return false;
     } else {
+      // delete and reset, add to free list
       page_table_.erase(page_id);
       replacer_->Pin(frame_id);
       page->ResetMemory();
@@ -140,6 +154,7 @@ bool BufferPoolManager::DeletePage(page_id_t page_id) {
 bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
   std::scoped_lock<std::recursive_mutex> lock(latch_);
   if (page_table_.count(page_id) == 0) {
+    // can not find page
     return false;
   } else {
     frame_id_t frame_id = page_table_[page_id];
@@ -147,16 +162,20 @@ bool BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) {
     if (page->GetPinCount() == 0) {
       return false;
     } else if (page->GetPinCount() == 1) {
+      // pincount = 1, change to 0 and unpin in replacer
       replacer_->Unpin(frame_id);
+      // update dirty
       if (page->is_dirty_ == false) {
         page->is_dirty_ = is_dirty;
       }
       page->pin_count_--;
       return true;
     } else {
+      // update dirty
       if (page->is_dirty_ == false) {
         page->is_dirty_ = is_dirty;
       }
+      // update pincount
       page->pin_count_--;
       return true;
     }
@@ -171,6 +190,7 @@ bool BufferPoolManager::FlushPage(page_id_t page_id) {
   if (page_table_.count(page_id) == 0) {
     return false;
   } else {
+    // write the page
     frame_id_t frame_id = page_table_[page_id];
     Page *page = &pages_[frame_id];
     page->WLatch();
