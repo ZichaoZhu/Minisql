@@ -111,10 +111,11 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
     return DB_FAILED;
   }
 
-  // table heap
-  TableHeap *table_heap = TableHeap::Create(buffer_pool_manager_, schema, txn, log_manager_, lock_manager_);
-  // table meta
   Schema *table_schema = Schema::DeepCopySchema(schema);
+
+  // table heap
+  TableHeap *table_heap = TableHeap::Create(buffer_pool_manager_, table_schema, txn, log_manager_, lock_manager_);
+  // table meta
   TableMetadata *table_meta = TableMetadata::Create(table_id, table_name, table_heap->GetFirstPageId(), table_schema);
   table_meta->SerializeTo(page->GetData());
   buffer_pool_manager_->UnpinPage(page_id, true);
