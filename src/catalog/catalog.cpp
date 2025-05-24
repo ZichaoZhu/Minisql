@@ -67,17 +67,19 @@ CatalogManager::CatalogManager(BufferPoolManager *buffer_pool_manager, LockManag
                                LogManager *log_manager, bool init)
     : buffer_pool_manager_(buffer_pool_manager), lock_manager_(lock_manager), log_manager_(log_manager) {
   Page *page = buffer_pool_manager_->FetchPage(CATALOG_META_PAGE_ID);
-  // init
   if (init) {
+    // initial
     catalog_meta_ = CatalogMeta::NewInstance();
     FlushCatalogMetaPage();
     buffer_pool_manager->UnpinPage(CATALOG_META_PAGE_ID, true);
   } else {
     // load
     catalog_meta_ = CatalogMeta::DeserializeFrom(page->GetData());
+    // load table
     for (auto &iter : catalog_meta_->table_meta_pages_) {
       LoadTable(iter.first, iter.second);
     }
+    // load index
     for (auto &iter : catalog_meta_->index_meta_pages_) {
       LoadIndex(iter.first, iter.second);
     }
@@ -100,19 +102,21 @@ CatalogManager::~CatalogManager() {
  * TODO: Student Implement
  */
 dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schema, Txn *txn, TableInfo *&table_info) {
+  // table exist
   if (table_names_.find(table_name) != table_names_.end()) {
     return DB_TABLE_ALREADY_EXIST;
   }
   table_id_t table_id = catalog_meta_->GetNextTableId();
   page_id_t page_id;
 
+  // no new page
   Page *page = buffer_pool_manager_->NewPage(page_id);
   if (page == nullptr) {
     return DB_FAILED;
   }
 
+  // deep copy schema, copy column
   Schema *table_schema = Schema::DeepCopySchema(schema);
-
   // table heap
   TableHeap *table_heap = TableHeap::Create(buffer_pool_manager_, table_schema, txn, log_manager_, lock_manager_);
   // table meta
@@ -135,6 +139,7 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
  */
 dberr_t CatalogManager::GetTable(const string &table_name, TableInfo *&table_info) {
   table_info = nullptr;
+  // can not find table
   if (table_names_.find(table_name) == table_names_.end()) {
     return DB_TABLE_NOT_EXIST;
   }
@@ -142,6 +147,7 @@ dberr_t CatalogManager::GetTable(const string &table_name, TableInfo *&table_inf
   if (tables_.find(table_id) == tables_.end()) {
     return DB_TABLE_NOT_EXIST;
   }
+  // find table
   table_info = tables_.at(table_id);
   return DB_SUCCESS;
 }
@@ -162,20 +168,23 @@ dberr_t CatalogManager::GetTables(vector<TableInfo *> &tables) const {
 dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string &index_name,
                                     const std::vector<std::string> &index_keys, Txn *txn, IndexInfo *&index_info,
                                     const string &index_type) {
+  // can not find table
   if (table_names_.find(table_name) == table_names_.end()) {
     return DB_TABLE_NOT_EXIST;
   }
+  // index exist
   if (index_names_[table_name].find(index_name) != index_names_[table_name].end()) {
     return DB_INDEX_ALREADY_EXIST;
   }
+
+  // create index
   index_id_t index_id = catalog_meta_->GetNextIndexId();
   table_id_t table_id = table_names_[table_name];
   std::vector<uint32_t> key_map;
   if (tables_.find(table_id) == tables_.end()) {
     return DB_TABLE_NOT_EXIST;
   }
-
-  // key map
+  // get key map
   TableInfo *table_info = tables_[table_id];
   Schema *table_schema = table_info->GetSchema();
   for (auto &iter : index_keys) {
@@ -187,12 +196,13 @@ dberr_t CatalogManager::CreateIndex(const std::string &table_name, const string 
     key_map.push_back(key_id);
   }
 
-  // index meta, info
+  // new page
   page_id_t page_id;
   Page *page = buffer_pool_manager_->NewPage(page_id);
   if (page_id == INVALID_PAGE_ID) {
     return DB_FAILED;
   }
+  // index meta and info
   IndexMetadata *index_meta = IndexMetadata::Create(index_id, index_name, table_id, key_map);
   index_info = IndexInfo::Create();
   index_info->Init(index_meta, table_info, buffer_pool_manager_);
@@ -260,6 +270,7 @@ dberr_t CatalogManager::DropTable(const string &table_name) {
  * TODO: Student Implement
  */
 dberr_t CatalogManager::DropIndex(const string &table_name, const string &index_name) {
+  // index not found
   if (index_names_.find(table_name) == index_names_.end()) {
     return DB_INDEX_NOT_FOUND;
   }
@@ -270,7 +281,7 @@ dberr_t CatalogManager::DropIndex(const string &table_name, const string &index_
   index_id_t index_id = index_names_[table_name][index_name];
   // catalog meta
   catalog_meta_->DeleteIndexMetaPage(buffer_pool_manager_, index_id);
-  // catalog management
+  // catalog management and index info
   IndexInfo *index_info = indexes_[index_id];
   index_names_[table_name].erase(index_name);
   indexes_.erase(index_id);
@@ -281,6 +292,7 @@ dberr_t CatalogManager::DropIndex(const string &table_name, const string &index_
 }
 
 dberr_t CatalogManager::DropTable(table_id_t table_id) {
+  // table not exist
   if (tables_.find(table_id) == tables_.end()) {
     return DB_TABLE_NOT_EXIST;
   }
@@ -293,11 +305,12 @@ dberr_t CatalogManager::DropTable(table_id_t table_id) {
     DropIndex(table_name, iter.first);
   }
   index_names_.erase(table_name);
+
   // delete table
   // free table heap
   TableHeap *table_heap = table_info->GetTableHeap();
   table_heap->FreeTableHeap();
-  // catalog meta
+  // catalog
   page_id_t page_id = catalog_meta_->table_meta_pages_[table_id];
   buffer_pool_manager_->DeletePage(page_id);
   catalog_meta_->table_meta_pages_.erase(table_id);
@@ -314,6 +327,7 @@ dberr_t CatalogManager::DropTable(table_id_t table_id) {
  * TODO: Student Implement
  */
 dberr_t CatalogManager::FlushCatalogMetaPage() const {
+  // flush to buffer
   Page *page = buffer_pool_manager_->FetchPage(CATALOG_META_PAGE_ID);
   catalog_meta_->SerializeTo(page->GetData());
   buffer_pool_manager_->UnpinPage(CATALOG_META_PAGE_ID, true);
