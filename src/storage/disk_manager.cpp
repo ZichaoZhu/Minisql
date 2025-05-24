@@ -53,31 +53,46 @@ void DiskManager::WritePage(page_id_t logical_page_id, const char *page_data) {
 page_id_t DiskManager::AllocatePage() {
   std::scoped_lock<std::recursive_mutex> lock(db_io_latch_);
   DiskFileMetaPage *meta_page = reinterpret_cast<DiskFileMetaPage *>(meta_data_);
+
+  // find in already existing extent
   for (uint32_t extent_id = 0; extent_id < meta_page->GetExtentNums(); extent_id++) {
+    // not full
     if (meta_page->GetExtentUsedPage(extent_id) < BITMAP_SIZE) {
       char bitmap_data[PAGE_SIZE];
+
+      // get bitmap physical page_id, and read bitmap
       page_id_t bitmap_id = 1 + extent_id * (BITMAP_SIZE + 1);
       ReadPhysicalPage(bitmap_id, bitmap_data);
       BitmapPage<PAGE_SIZE> *bitmap_page = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(bitmap_data);
       uint32_t extent_offset;
+      // bitmap allocate
       bitmap_page->AllocatePage(extent_offset);
+      // update disk meta
       meta_page->num_allocated_pages_++;
       meta_page->extent_used_page_[extent_id]++;
+      // write disk_meta and bitmap
       WritePhysicalPage(0, meta_data_);
       WritePhysicalPage(bitmap_id, bitmap_data);
+      // return logical page id
       return extent_id * BITMAP_SIZE + extent_offset;
     }
   };
+  // the existing extents are full
   if (meta_page->GetExtentNums() < MAX_VALID_PAGE_ID / BITMAP_SIZE) {
     uint32_t extent_id = meta_page->GetExtentNums();
     uint32_t extent_offset;
+
+    // get bitmap physical page_id, initial
     page_id_t bitmap_id = 1 + extent_id * (BITMAP_SIZE + 1);
     char bitmap_data[PAGE_SIZE] = {0};
     BitmapPage<PAGE_SIZE> *bitmap_page = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(bitmap_data);
+    // bitmap allocate
     bitmap_page->AllocatePage(extent_offset);
+    // update disk meta
     meta_page->num_allocated_pages_++;
     meta_page->num_extents_++;
     meta_page->extent_used_page_[extent_id] = 1;
+    // write disk meta and bitmap
     WritePhysicalPage(0, meta_data_);
     WritePhysicalPage(bitmap_id, bitmap_data);
     return extent_id * BITMAP_SIZE + extent_offset;
@@ -91,19 +106,24 @@ page_id_t DiskManager::AllocatePage() {
  */
 void DiskManager::DeAllocatePage(page_id_t logical_page_id) {
   std::scoped_lock<std::recursive_mutex> lock(db_io_latch_);
+  // get extent id and offset
   uint32_t extent_id = logical_page_id / BITMAP_SIZE;
   uint32_t extend_offset = logical_page_id % BITMAP_SIZE;
   DiskFileMetaPage *meta_page = reinterpret_cast<DiskFileMetaPage *>(meta_data_);
   if (extent_id >= meta_page->GetExtentNums()) {
     return;
   } else {
+    // get the bitmap page_id and read
     page_id_t bitmap_id = 1 + extent_id * (BITMAP_SIZE + 1);
     char bitmap_data[PAGE_SIZE];
     ReadPhysicalPage(bitmap_id, bitmap_data);
     BitmapPage<PAGE_SIZE> *bitmap_page = reinterpret_cast<BitmapPage<PAGE_SIZE> *>(bitmap_data);
+    // deallocate
     if (bitmap_page->DeAllocatePage(extend_offset)) {
+      // update the disk meta
       meta_page->num_allocated_pages_--;
       meta_page->extent_used_page_[extent_id]--;
+      // write disk meta and bitmap
       WritePhysicalPage(0, meta_data_);
       WritePhysicalPage(bitmap_id, bitmap_data);
     }
@@ -118,12 +138,14 @@ bool DiskManager::IsPageFree(page_id_t logical_page_id) {
   if (logical_page_id > MAX_VALID_PAGE_ID) {
     return false;
   }
+  // get extent id and offset
   uint32_t extent_id = logical_page_id / BITMAP_SIZE;
   uint32_t extent_offset = logical_page_id % BITMAP_SIZE;
   DiskFileMetaPage *meta_page = reinterpret_cast<DiskFileMetaPage *>(meta_data_);
   if (extent_id >= meta_page->GetExtentNums()) {
     return true;
   } else {
+    // get bitmap page_id and read
     char bitmap_data[PAGE_SIZE];
     page_id_t bitmap_id = 1 + extent_id * (BITMAP_SIZE + 1);
     ReadPhysicalPage(bitmap_id, bitmap_data);
@@ -136,6 +158,8 @@ bool DiskManager::IsPageFree(page_id_t logical_page_id) {
  * TODO: Student Implement
  */
 page_id_t DiskManager::MapPageId(page_id_t logical_page_id) {
+  // extent id and extent offset
+  // disk meta | bitmap0 | page0 | page1 | bitmap1 | page2 | page3
   uint32_t extent_id = logical_page_id / BITMAP_SIZE;
   uint32_t extent_offset = logical_page_id % BITMAP_SIZE;
   return 1 + extent_id * (BITMAP_SIZE + 1) + 1 + extent_offset;
