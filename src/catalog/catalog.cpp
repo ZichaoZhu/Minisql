@@ -110,14 +110,15 @@ dberr_t CatalogManager::CreateTable(const string &table_name, TableSchema *schem
   if (page == nullptr) {
     return DB_FAILED;
   }
+
+  // table heap
+  TableHeap *table_heap = TableHeap::Create(buffer_pool_manager_, schema, txn, log_manager_, lock_manager_);
   // table meta
   Schema *table_schema = Schema::DeepCopySchema(schema);
-  TableMetadata *table_meta = TableMetadata::Create(table_id, table_name, INVALID_PAGE_ID, table_schema);
+  TableMetadata *table_meta = TableMetadata::Create(table_id, table_name, table_heap->GetFirstPageId(), table_schema);
   table_meta->SerializeTo(page->GetData());
   buffer_pool_manager_->UnpinPage(page_id, true);
-
-  // table heap info
-  TableHeap *table_heap = TableHeap::Create(buffer_pool_manager_, schema, txn, log_manager_, lock_manager_);
+  // table info
   table_info = TableInfo::Create();
   table_info->Init(table_meta, table_heap);
   // catalog
