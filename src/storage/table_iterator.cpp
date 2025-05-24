@@ -32,41 +32,16 @@ bool TableIterator::operator!=(const TableIterator &itr) const {
   return !(*this == itr);
 }
 
+Row row_;
 const Row &TableIterator::operator*() {
-  // step 1: 获得当前的page
-  auto page = reinterpret_cast<TablePage *>(table_heap_->buffer_pool_manager_->FetchPage(rid_.GetPageId()));
-  if (page == nullptr) {
-    return Row();
-  }
-  // step 2: 获得当前的row
-  Row *row = new Row(rid_);
-  page->RLatch();
-  bool get_tuple = page->GetTuple(row, table_heap_->schema_, txn_, table_heap_->lock_manager_);
-  page->RUnlatch();
-  table_heap_->buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
-  if (!get_tuple) {
-    delete row;
-    return Row();
-  }
-  return *row;
+  row_ = Row(rid_);
+  table_heap_->GetTuple(&row_, txn_);
+  return row_;
 }
 
 Row *TableIterator::operator->() {
-  // step 1: 获取当前page
-  auto page = reinterpret_cast<TablePage *>(table_heap_->buffer_pool_manager_->FetchPage(rid_.GetPageId()));
-  if (page == nullptr) {
-    return nullptr;
-  }
-  // step 2: 获取当前row
   Row *row = new Row(rid_);
-  page->RLatch();
-  bool get_tuple = page->GetTuple(row, table_heap_->schema_, txn_, table_heap_->lock_manager_);
-  page->RUnlatch();
-  table_heap_->buffer_pool_manager_->UnpinPage(page->GetTablePageId(), false);
-  if (!get_tuple) {
-    delete row;
-    return nullptr;
-  }
+  table_heap_->GetTuple(row, txn_);
   return row;
 }
 
