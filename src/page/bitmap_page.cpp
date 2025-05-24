@@ -8,14 +8,20 @@
 template <size_t PageSize>
 bool BitmapPage<PageSize>::AllocatePage(uint32_t &page_offset) {
   if (page_allocated_ == GetMaxSupportedSize()) {
+    // is full
     return false;
   } else {
+    // update bitmap
     uint32_t byte_index = next_free_page_ / 8;
     uint8_t bit_index = next_free_page_ % 8;
     uint8_t bit = 1 << bit_index;
     page_offset = next_free_page_;
+    // update byte, update the bit to 1
     bytes[byte_index] = bytes[byte_index] | bit;
+
+    // page_allocated
     page_allocated_++;
+    // update the next_free_page
     if (page_allocated_ == GetMaxSupportedSize()) {
       next_free_page_ = GetMaxSupportedSize();
       return true;
@@ -42,13 +48,17 @@ bool BitmapPage<PageSize>::DeAllocatePage(uint32_t page_offset) {
   } else if (IsPageFree(page_offset)) {
     return false;
   } else {
+    // update page_allocated
     page_allocated_--;
+    // update next_free_page
     if (page_offset < next_free_page_) {
       next_free_page_ = page_offset;
     }
+    // update bitmap
     uint32_t byte_index = page_offset / 8;
     uint8_t bit_index = page_offset % 8;
     uint8_t bit = 1 << bit_index;
+    // update the bit to 0
     bytes[byte_index] = bytes[byte_index] & (~bit);
     return true;
   }
@@ -74,8 +84,10 @@ bool BitmapPage<PageSize>::IsPageFreeLow(uint32_t byte_index, uint8_t bit_index)
     uint8_t byte = bytes[byte_index];
     uint8_t bit = 1 << bit_index;
     if ((byte & bit) == 0) {
+      // the bit = 0, is free
       return true;
     } else {
+      // not free
       return false;
     }
   } else {
