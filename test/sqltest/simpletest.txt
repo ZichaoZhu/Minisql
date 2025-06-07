@@ -1,8 +1,0 @@
-create database db0;
-show databases;
-use db0;
-show tables;
-create table t1(a int, b char(20), c float);
-insert into t1 values(1, "aaa", 2.33);
-select * from t1;
-quit;
