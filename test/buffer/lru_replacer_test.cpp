@@ -40,4 +40,36 @@ TEST(LRUReplacerTest, SampleTest) {
   EXPECT_EQ(6, value);
   lru_replacer.Victim(&value);
   EXPECT_EQ(4, value);
+
+  // test when the replacer is full
+  lru_replacer.Unpin(1);
+  lru_replacer.Unpin(2);
+  lru_replacer.Unpin(3);
+  lru_replacer.Unpin(4);
+  lru_replacer.Unpin(5);
+  lru_replacer.Unpin(6);
+  lru_replacer.Unpin(7);
+
+  lru_replacer.Unpin(8);
+  lru_replacer.Unpin(9);
+  lru_replacer.Unpin(10);
+  lru_replacer.Unpin(11);
+  lru_replacer.Unpin(12);
+  lru_replacer.Unpin(13);
+  lru_replacer.Unpin(14);
+
+  lru_replacer.Victim(&value);
+  EXPECT_EQ(8, value);
+  lru_replacer.Victim(&value);
+  EXPECT_EQ(9, value);
+  lru_replacer.Victim(&value);
+  EXPECT_EQ(10, value);
+  lru_replacer.Victim(&value);
+  EXPECT_EQ(11, value);
+  lru_replacer.Victim(&value);
+  EXPECT_EQ(12, value);
+  lru_replacer.Victim(&value);
+  EXPECT_EQ(13, value);
+  lru_replacer.Victim(&value);
+  EXPECT_EQ(14, value);
 }
