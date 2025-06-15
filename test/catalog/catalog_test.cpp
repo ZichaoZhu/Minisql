@@ -65,6 +65,30 @@ TEST(CatalogTest, CatalogTableTest) {
   TableInfo *table_info_03 = nullptr;
   ASSERT_EQ(DB_TABLE_NOT_EXIST, catalog_02->GetTable("table-2", table_info_03));
   ASSERT_EQ(DB_SUCCESS, catalog_02->GetTable("table-1", table_info_03));
+
+  // multiple create test
+  ASSERT_EQ(DB_TABLE_ALREADY_EXIST, catalog_02->CreateTable("table-1", schema.get(), &txn, table_info));
+  ASSERT_EQ(DB_SUCCESS, catalog_02->CreateTable("table-2", schema.get(), &txn, table_info));
+  ASSERT_EQ(DB_SUCCESS, catalog_02->CreateTable("table-3", schema.get(), &txn, table_info));
+  ASSERT_EQ(DB_SUCCESS, catalog_02->CreateTable("table-4", schema.get(), &txn, table_info));
+  // GetTables test
+  std::vector<TableInfo *> tables;
+  ASSERT_EQ(DB_SUCCESS, catalog_02->GetTables(tables));
+  ASSERT_EQ(4, tables.size());
+  // DropTable test
+  ASSERT_EQ(DB_SUCCESS, catalog_02->DropTable("table-4"));
+  ASSERT_EQ(DB_TABLE_NOT_EXIST, catalog_02->DropTable("table-4"));
+
+  tables.clear();
+  ASSERT_EQ(DB_SUCCESS, catalog_02->GetTables(tables));
+  ASSERT_EQ(3, tables.size());
+  ASSERT_EQ(DB_SUCCESS, catalog_02->DropTable("table-3"));
+  ASSERT_EQ(DB_SUCCESS, catalog_02->DropTable("table-2"));
+
+  tables.clear();
+  ASSERT_EQ(DB_SUCCESS, catalog_02->GetTables(tables));
+  ASSERT_EQ(1, tables.size());
+
   delete db_02;
 }
 
@@ -125,5 +149,15 @@ TEST(CatalogTest, CatalogIndexTest) {
     ASSERT_EQ(DB_SUCCESS, index_info_02->GetIndex()->ScanKey(row, ret_02, &txn));
     ASSERT_EQ(rid.Get(), ret_02[i].Get());
   }
+
+  // multiple create test
+  ASSERT_EQ(DB_SUCCESS, catalog_02->CreateIndex("table-1", "index-2", index_keys, &txn, index_info, "bptree"));
+  ASSERT_EQ(DB_SUCCESS, catalog_02->CreateIndex("table-1", "index-3", index_keys, &txn, index_info, "bptree"));
+  // table not exists
+  ASSERT_EQ(DB_TABLE_NOT_EXIST, catalog_02->CreateIndex("table-2", "index-4", index_keys, &txn, index_info, "bptree"));
+  // drop test
+  ASSERT_EQ(DB_SUCCESS, catalog_02->DropIndex("table-1", "index-3"));
+  ASSERT_EQ(DB_INDEX_NOT_FOUND, catalog_02->DropIndex("table-1", "index-3"));
+
   delete db_02;
 }
